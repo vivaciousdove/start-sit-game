@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Start/Sit Weekly Lineup Challenge</title>
+  <meta name="description" content="A fantasy football start/sit game built with HTML, CSS, and JavaScript." />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="header">
+      <h1>Start/Sit Weekly Lineup Challenge</h1>
+      <p class="sub">
+        Make your picks. Beat your best score. Daily mode gives everyone the same matchups.
+      </p>
+    </header>
+
+    <section class="panel">
+      <div class="row">
+        <button id="newWeekBtn" class="btn">New Week</button>
+        <button id="dailyBtn" class="btn btn-ghost">Daily: Off</button>
+        <button id="hintBtn" class="btn btn-ghost">Hint: Off</button>
+
+        <!-- NEW: Mode toggle -->
+        <button id="modeBtn" class="btn btn-ghost">Mode: Start/Sit</button>
+
+        <button id="scoreBtn" class="btn btn-primary">Score Week</button>
+      </div>
+
+      <div class="stats" aria-live="polite">
+        <span id="weekLabel">Week: 1</span>
+        <span id="streak">Win Streak: 0</span>
+        <span id="bestStreak">Best Streak: 0</span>
+        <span id="bestScore">Best Score: 0</span>
+      </div>
+
+      <p id="message" class="message" aria-live="polite"></p>
+    </section>
+
+    <!-- Start/Sit mode -->
+    <section class="matchups" id="matchups" aria-label="Start/Sit matchups"></section>
+
+    <!-- NEW: Lineup mode -->
+    <section class="lineup" id="lineup" aria-label="Lineup Builder" hidden>
+      <div class="lineup-grid">
+        <div class="lineup-card">
+          <h2>Build Your Lineup (Standard Scoring)</h2>
+          <p class="muted">
+            Fill: QB, RB, RB, WR, WR, TE, FLEX (RB/WR/TE). Then run the week simulation.
+          </p>
+          <div id="slots" class="slots"></div>
+          <p id="lineupStatus" class="muted"></p>
+        </div>
+
+        <div class="lineup-card">
+          <h2>AI Coach (Explainable)</h2>
+          <p class="muted">
+            Coach uses simple rules (floor vs ceiling, tag risk) — perfect for swapping to a real API later.
+          </p>
+          <div id="coach" class="coach"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Shared Results (labels change per mode) -->
+    <section class="results" id="results" aria-label="Results">
+      <div class="results-card">
+        <h2 id="resultsTitle">Results</h2>
+        <div class="results-grid">
+          <div>
+            <div class="label" id="labelYourScore">Your Score</div>
+            <div id="yourScore" class="value">—</div>
+          </div>
+          <div>
+            <div class="label" id="labelOptimalScore">Optimal Score</div>
+            <div id="optimalScore" class="value">—</div>
+          </div>
+          <div>
+            <div class="label" id="labelAccuracy">Accuracy</div>
+            <div id="accuracy" class="value">—</div>
+          </div>
+          <div>
+            <div class="label" id="labelOutcome">Outcome</div>
+            <div id="outcome" class="value">—</div>
+          </div>
+        </div>
+        <p class="muted" id="resultsTip">
+          Tip: “Win” = you matched the optimal pick in at least 3 of 4 matchups.
+        </p>
+      </div>
+    </section>
+
+    <!-- NEW: Leaderboards -->
+    <section class="leaderboards" id="leaderboards" aria-label="Leaderboards">
+      <div class="results-card">
+        <h2>Leaderboard</h2>
+        <div class="lb-grid">
+          <div>
+            <div class="label">Start/Sit Top Scores</div>
+            <ol id="ssBoard" class="lb"></ol>
+          </div>
+          <div>
+            <div class="label">Lineup Top Scores</div>
+            <ol id="luBoard" class="lb"></ol>
+          </div>
+        </div>
+        <p class="muted">Stored on this device (localStorage).</p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <small>
+        Built with HTML/CSS/JS. Perfect for Netlify static hosting.
+      </small>
+    </footer>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
