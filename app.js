@@ -30,13 +30,8 @@ const PLAYERS = [
   { name: "D. Njoku", pos: "TE", team: "CLE", opp: "PIT", proj: 10.4, floor: 5.5, ceil: 18.0, tag: "risk" }
 ];
 
-// ---------- DOM ----------
+// -------------------- DOM --------------------
 const matchupsEl = document.getElementById("matchups");
-const lineupEl = document.getElementById("lineup");
-const slotsEl = document.getElementById("slots");
-const coachEl = document.getElementById("coach");
-const lineupStatusEl = document.getElementById("lineupStatus");
-
 const msgEl = document.getElementById("message");
 const weekLabelEl = document.getElementById("weekLabel");
 
@@ -45,6 +40,24 @@ const optimalScoreEl = document.getElementById("optimalScore");
 const accuracyEl = document.getElementById("accuracy");
 const outcomeEl = document.getElementById("outcome");
 
+const streakEl = document.getElementById("streak");
+const bestStreakEl = document.getElementById("bestStreak");
+const bestScoreEl = document.getElementById("bestScore");
+
+const newWeekBtn = document.getElementById("newWeekBtn");
+const dailyBtn = document.getElementById("dailyBtn");
+const hintBtn = document.getElementById("hintBtn");
+const scoreBtn = document.getElementById("scoreBtn");
+
+// v2 DOM
+const modeBtn = document.getElementById("modeBtn");
+const lineupSection = document.getElementById("lineup");
+const slotsEl = document.getElementById("slots");
+const lineupStatusEl = document.getElementById("lineupStatus");
+const coachEl = document.getElementById("coach");
+const ssBoardEl = document.getElementById("ssBoard");
+const luBoardEl = document.getElementById("luBoard");
+
 const resultsTitleEl = document.getElementById("resultsTitle");
 const labelYourScoreEl = document.getElementById("labelYourScore");
 const labelOptimalScoreEl = document.getElementById("labelOptimalScore");
@@ -52,32 +65,28 @@ const labelAccuracyEl = document.getElementById("labelAccuracy");
 const labelOutcomeEl = document.getElementById("labelOutcome");
 const resultsTipEl = document.getElementById("resultsTip");
 
-const streakEl = document.getElementById("streak");
-const bestStreakEl = document.getElementById("bestStreak");
-const bestScoreEl = document.getElementById("bestScore");
-
-const ssBoardEl = document.getElementById("ssBoard");
-const luBoardEl = document.getElementById("luBoard");
-
-const newWeekBtn = document.getElementById("newWeekBtn");
-const dailyBtn = document.getElementById("dailyBtn");
-const hintBtn = document.getElementById("hintBtn");
-const scoreBtn = document.getElementById("scoreBtn");
-const modeBtn = document.getElementById("modeBtn");
-
-// ---------- State ----------
+// -------------------- State --------------------
 let week = 1;
-let hintOn = false;           // Start/Sit hint OR Lineup coach toggle (same button)
-let matchups = [];            // [{a,b, pick: 'a'|'b'|null}]
+let hintOn = false;
+let matchups = []; // Start/Sit: [{a,b, pick: 'a'|'b'|null}]
 let scored = false;
 
-let mode = "startsit";        // "startsit" | "lineup"
-const LINEUP_SLOTS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"];
-let lineup = {};              // slotKey -> playerName
-let lineupSlate = [];         // player objects used for this "week" slate (can be whole pool for MVP)
-let lastLineupSim = null;     // stores last sim detail for display
+let mode = "startsit"; // "startsit" | "lineup"
 
-// ---------- storage helpers ----------
+// Lineup mode state
+const LINEUP_SLOTS = [
+  { key: "QB", label: "QB", allowed: ["QB"] },
+  { key: "RB1", label: "RB", allowed: ["RB"] },
+  { key: "RB2", label: "RB", allowed: ["RB"] },
+  { key: "WR1", label: "WR", allowed: ["WR"] },
+  { key: "WR2", label: "WR", allowed: ["WR"] },
+  { key: "TE", label: "TE", allowed: ["TE"] },
+  { key: "FLEX", label: "FLEX", allowed: ["RB","WR","TE"] }
+];
+
+let lineup = {}; // {slotKey: playerName}
+
+// -------------------- storage helpers --------------------
 function getNum(key, fallback = 0) {
   const v = Number(localStorage.getItem(key));
   return Number.isFinite(v) ? v : fallback;
@@ -92,20 +101,19 @@ function getStr(key, fallback = "") {
 function setStr(key, val) {
   localStorage.setItem(key, String(val));
 }
-function getJson(key, fallback) {
+function getJSON(key, fallback) {
   try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw);
+    const v = localStorage.getItem(key);
+    return v ? JSON.parse(v) : fallback;
   } catch {
     return fallback;
   }
 }
-function setJson(key, val) {
+function setJSON(key, val) {
   localStorage.setItem(key, JSON.stringify(val));
 }
 
-// ---------- daily mode ----------
+// -------------------- daily mode --------------------
 function todayKeyUTC() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
@@ -139,7 +147,7 @@ function renderModeToggle() {
   dailyBtn.textContent = `Daily: ${isDailyMode() ? "On" : "Off"}`;
 }
 
-// ---------- streak / best ----------
+// -------------------- streak/score persistence (Start/Sit) --------------------
 function renderStats() {
   const streak = getNum("ss_streak", 0);
   const bestStreak = getNum("ss_bestStreak", 0);
@@ -149,8 +157,7 @@ function renderStats() {
   bestStreakEl.textContent = `Best Streak: ${bestStreak}`;
   bestScoreEl.textContent = `Best Score: ${bestScore.toFixed ? bestScore.toFixed(1) : bestScore}`;
 }
-
-function winWeekStartSit(yourCorrect) {
+function winWeek(yourCorrect) {
   // win = 3 or 4 correct matchups
   const win = yourCorrect >= 3;
   if (win) {
@@ -164,51 +171,16 @@ function winWeekStartSit(yourCorrect) {
   renderStats();
   return win;
 }
-
 function updateBestScore(score) {
   const best = getNum("ss_bestScore", 0);
   if (score > best) setNum("ss_bestScore", Number(score.toFixed(1)));
   renderStats();
 }
 
-// ---------- leaderboards ----------
-function pushLeaderboard(key, entry, limit = 10) {
-  const arr = getJson(key, []);
-  arr.push(entry);
-  arr.sort((a, b) => (b.score - a.score));
-  const trimmed = arr.slice(0, limit);
-  setJson(key, trimmed);
-  return trimmed;
-}
-
-function renderLeaderboards() {
-  const ss = getJson("lb_startsit", []);
-  const lu = getJson("lb_lineup", []);
-
-  ssBoardEl.innerHTML = ss.length ? "" : "<li><span class='lb-meta'>No scores yet.</span></li>";
-  luBoardEl.innerHTML = lu.length ? "" : "<li><span class='lb-meta'>No scores yet.</span></li>";
-
-  if (ss.length) {
-    ssBoardEl.innerHTML = ss.map(e => `
-      <li>
-        ${Number(e.score).toFixed(1)}
-        <div class="lb-meta">${e.label}</div>
-      </li>
-    `).join("");
-  }
-  if (lu.length) {
-    luBoardEl.innerHTML = lu.map(e => `
-      <li>
-        ${Number(e.score).toFixed(1)}
-        <div class="lb-meta">${e.label}</div>
-      </li>
-    `).join("");
-  }
-}
-
-// ---------- matchup generation (Start/Sit) ----------
+// -------------------- matchup generation (Start/Sit) --------------------
 function chooseUniquePlayers(rng, count) {
   const pool = PLAYERS.slice();
+  // shuffle
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -218,8 +190,8 @@ function chooseUniquePlayers(rng, count) {
 
 function generateMatchups() {
   const seed = isDailyMode()
-    ? hashToInt(`daily:${todayKeyUTC()}:startsit`)
-    : hashToInt(`random:${Date.now()}:${Math.random()}:startsit`);
+    ? hashToInt(`daily:${todayKeyUTC()}`)
+    : hashToInt(`random:${Date.now()}:${Math.random()}`);
 
   const rng = seededRand(seed);
 
@@ -231,7 +203,7 @@ function generateMatchups() {
   return pairs;
 }
 
-// ---------- rendering helpers ----------
+// -------------------- rendering (Start/Sit) --------------------
 function badgeClass(tag) {
   if (tag === "good") return "badge good";
   if (tag === "ok") return "badge ok";
@@ -297,42 +269,9 @@ function clearResults() {
   outcomeEl.textContent = "—";
 }
 
-function setResultsUIForMode() {
-  if (mode === "startsit") {
-    resultsTitleEl.textContent = "Results";
-    labelYourScoreEl.textContent = "Your Score";
-    labelOptimalScoreEl.textContent = "Optimal Score";
-    labelAccuracyEl.textContent = "Accuracy";
-    labelOutcomeEl.textContent = "Outcome";
-    resultsTipEl.textContent = "Tip: “Win” = you matched the optimal pick in at least 3 of 4 matchups.";
-
-    newWeekBtn.textContent = "New Week";
-    hintBtn.textContent = `Hint: ${hintOn ? "On" : "Off"}`;
-    modeBtn.textContent = "Mode: Start/Sit";
-    scoreBtn.textContent = "Score Week";
-
-    matchupsEl.hidden = false;
-    lineupEl.hidden = true;
-  } else {
-    resultsTitleEl.textContent = "Lineup Results";
-    labelYourScoreEl.textContent = "Week Score";
-    labelOptimalScoreEl.textContent = "Projected Optimal";
-    labelAccuracyEl.textContent = "Your Projection";
-    labelOutcomeEl.textContent = "Grade";
-    resultsTipEl.textContent = "Tip: Fill all lineup slots. Daily mode makes the slate repeatable by date (UTC).";
-
-    newWeekBtn.textContent = "New Slate";
-    hintBtn.textContent = `Coach: ${hintOn ? "On" : "Off"}`;
-    modeBtn.textContent = "Mode: Lineup";
-    scoreBtn.textContent = "Simulate Week";
-
-    matchupsEl.hidden = true;
-    lineupEl.hidden = false;
-  }
-}
-
-// ---------- Start/Sit scoring ----------
-function computeWeekScoreStartSit() {
+// -------------------- scoring (Start/Sit) --------------------
+function computeWeekScore() {
+  // require all picks
   for (const m of matchups) {
     if (!m.pick) return { ok: false, reason: "Make all 4 Start picks first." };
   }
@@ -365,421 +304,239 @@ function computeWeekScoreStartSit() {
   };
 }
 
-// ---------- Lineup mode (builder + simulation) ----------
-
-// eligibility checks
-function eligibleForSlot(pos, slot) {
-  if (slot === "FLEX") return pos === "RB" || pos === "WR" || pos === "TE";
-  return pos === slot;
+// -------------------- v2: Lineup mode helpers --------------------
+function getPlayersByPos(pos) {
+  return PLAYERS.filter(p => p.pos === pos);
 }
-
-function slateForWeek() {
-  // MVP: use full pool, but deterministic order for daily vs random
-  const seed = isDailyMode()
-    ? hashToInt(`daily:${todayKeyUTC()}:lineup`)
-    : hashToInt(`random:${Date.now()}:${Math.random()}:lineup`);
-  const rng = seededRand(seed);
-  const pool = PLAYERS.slice();
-
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-
-  // keep entire pool for MVP; later this becomes a "weekly slate" from API
-  return pool;
+function getPlayersByAllowed(allowed) {
+  return PLAYERS.filter(p => allowed.includes(p.pos));
 }
-
-function slotKey(slot, idx) {
-  if (slot === "RB") return `RB${idx}`;
-  if (slot === "WR") return `WR${idx}`;
-  return slot;
+function uniquePlayerOptions(players, alreadyPickedNames) {
+  return players.filter(p => !alreadyPickedNames.has(p.name));
 }
-
-function getSlotOrder() {
-  // produce keys in order: QB, RB1, RB2, WR1, WR2, TE, FLEX
-  return ["QB", "RB1", "RB2", "WR1", "WR2", "TE", "FLEX"];
+function getLineupPickedNames() {
+  return new Set(Object.values(lineup).filter(Boolean));
 }
 
 function renderSlots() {
   slotsEl.innerHTML = "";
+  const picked = getLineupPickedNames();
 
-  const slotKeys = getSlotOrder();
-  const selectedNames = new Set(Object.values(lineup).filter(Boolean));
+  LINEUP_SLOTS.forEach(slot => {
+    const candidates = uniquePlayerOptions(getPlayersByAllowed(slot.allowed), picked);
+    // Also allow keeping current selection (so you can re-open dropdown)
+    const current = lineup[slot.key];
+    const pool = current
+      ? [PLAYERS.find(p => p.name === current)].filter(Boolean).concat(candidates)
+      : candidates;
 
-  slotKeys.forEach((k) => {
-    const slotType = k.startsWith("RB") ? "RB" : k.startsWith("WR") ? "WR" : k;
-
-    const eligible = lineupSlate.filter(p => eligibleForSlot(p.pos, slotType));
-
-    const div = document.createElement("div");
-    div.className = "slot";
-
-    const current = lineup[k] || "";
-    const options = eligible
-      .map(p => {
-        const usedElsewhere = selectedNames.has(p.name) && p.name !== current;
-        const disabled = usedElsewhere ? "disabled" : "";
-        const tagLabel = p.tag === "good" ? "High" : p.tag === "ok" ? "Solid" : "Risk";
-        return `<option value="${escapeHtml(p.name)}" ${disabled} ${p.name === current ? "selected" : ""}>
-          ${p.name} (${p.pos} • ${p.team}) — Proj ${p.proj.toFixed(1)} — ${tagLabel}
-        </option>`;
-      })
-      .join("");
-
-    div.innerHTML = `
+    const el = document.createElement("div");
+    el.className = "slot";
+    el.innerHTML = `
       <div class="slot-header">
-        <div class="slot-title">${k}</div>
-        <small>${slotType === "FLEX" ? "RB/WR/TE" : slotType}</small>
+        <div class="slot-title">${slot.label}</div>
+        <small>Allowed: ${slot.allowed.join("/")}</small>
       </div>
-      <select class="select" data-slot="${k}">
-        <option value="" ${current === "" ? "selected" : ""}>— Select a player —</option>
-        ${options}
+      <select class="select" data-slot="${slot.key}">
+        <option value="">Select player…</option>
+        ${pool.map(p => `
+          <option value="${p.name}" ${p.name === current ? "selected" : ""}>
+            ${p.name} (${p.pos} • ${p.team}) — Proj ${p.proj.toFixed(1)}
+          </option>
+        `).join("")}
       </select>
     `;
-
-    slotsEl.appendChild(div);
+    slotsEl.appendChild(el);
   });
 
-  updateLineupStatus();
-  renderCoach();
+  lineupStatusEl.textContent = isLineupComplete()
+    ? "Lineup complete. Click Score Week to simulate this slate."
+    : "Fill all lineup slots to simulate the week.";
 }
 
-function updateLineupStatus() {
-  const slotKeys = getSlotOrder();
-  const filled = slotKeys.filter(k => lineup[k]).length;
-  const valid = filled === slotKeys.length && new Set(Object.values(lineup)).size === slotKeys.length;
-
-  const projTotal = computeLineupProjection();
-  lineupStatusEl.textContent =
-    `Lineup status: ${valid ? "VALID ✅" : "INCOMPLETE ❌"} • Filled ${filled}/${slotKeys.length}` +
-    (projTotal > 0 ? ` • Projection: ${projTotal.toFixed(1)}` : "");
-}
-
-function computeLineupProjection() {
-  const slotKeys = getSlotOrder();
-  let total = 0;
-  for (const k of slotKeys) {
-    const name = lineup[k];
-    if (!name) continue;
-    const p = lineupSlate.find(x => x.name === name);
-    if (p) total += p.proj;
-  }
-  return total;
-}
-
-function computeGreedyOptimalProjection() {
-  // Greedy "optimal" based on projections, respecting lineup rules
-  const pool = lineupSlate.slice().sort((a, b) => b.proj - a.proj);
-  const used = new Set();
-
-  function pickOne(posAllowed) {
-    const p = pool.find(x => !used.has(x.name) && posAllowed(x));
-    if (!p) return null;
-    used.add(p.name);
-    return p;
-  }
-
-  const qb = pickOne(x => x.pos === "QB");
-  const rb1 = pickOne(x => x.pos === "RB");
-  const rb2 = pickOne(x => x.pos === "RB");
-  const wr1 = pickOne(x => x.pos === "WR");
-  const wr2 = pickOne(x => x.pos === "WR");
-  const te = pickOne(x => x.pos === "TE");
-  const flex = pickOne(x => x.pos === "RB" || x.pos === "WR" || x.pos === "TE");
-
-  const picks = [qb, rb1, rb2, wr1, wr2, te, flex].filter(Boolean);
-  const total = picks.reduce((sum, p) => sum + p.proj, 0);
-  return Number(total.toFixed(1));
+function isLineupComplete() {
+  return LINEUP_SLOTS.every(s => !!lineup[s.key]);
 }
 
 function renderCoach() {
   coachEl.innerHTML = "";
+  const picked = LINEUP_SLOTS
+    .map(s => ({ slot: s.key, player: PLAYERS.find(p => p.name === lineup[s.key]) }))
+    .filter(x => x.player);
 
-  if (!hintOn) {
-    coachEl.innerHTML = `<div class="coach-card"><div class="muted">Coach is off. Toggle Coach: On to see recommendations.</div></div>`;
+  if (picked.length === 0) {
+    coachEl.innerHTML = `<div class="coach-card">Pick some players to get coaching notes.</div>`;
     return;
   }
 
-  const slotKeys = getSlotOrder();
-  const recommendations = [];
+  const cards = [];
+  for (const { slot, player } of picked) {
+    const risk = player.tag;
+    const upside = player.ceil - player.proj;
+    const downside = player.proj - player.floor;
 
-  slotKeys.forEach((k) => {
-    const slotType = k.startsWith("RB") ? "RB" : k.startsWith("WR") ? "WR" : k;
-    const chosenName = lineup[k];
-    const chosen = chosenName ? lineupSlate.find(p => p.name === chosenName) : null;
+    const style = risk === "good" ? "High confidence" : risk === "ok" ? "Solid" : "Risky";
+    const note = risk === "good"
+      ? "Safe floor with strong projection."
+      : risk === "ok"
+        ? "Reasonable play; consider matchup and ceiling."
+        : "High variance; only worth it if you need upside.";
 
-    const eligible = lineupSlate
-      .filter(p => eligibleForSlot(p.pos, slotType))
+    const recommendation = (upside > downside && risk !== "risk")
+      ? "Upside lean"
+      : (downside >= upside || risk === "risk")
+        ? "Floor lean"
+        : "Balanced";
+
+    cards.push(`
+      <div class="coach-card">
+        <div><strong>${slot}</strong> — ${player.name} (${player.pos})</div>
+        <div class="muted">${style}. ${note}</div>
+        <div class="muted">Coach read: <strong>${recommendation}</strong> • Floor ${player.floor.toFixed(1)} / Proj ${player.proj.toFixed(1)} / Ceil ${player.ceil.toFixed(1)}</div>
+      </div>
+    `);
+  }
+
+  coachEl.innerHTML = cards.join("");
+}
+
+// -------------------- v2: Standard scoring simulation --------------------
+// Standard scoring (typical): Passing: 1 pt per 25 yards, 4 per pass TD, -2 per INT
+// Rushing/Receiving: 1 per 10 yards, 6 per TD, 1 per reception (PPR is common but we keep it simple-ish)
+// We'll simulate plausible stat lines around projection using floor/ceiling.
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function randNormal(rng) {
+  // Box-Muller transform
+  let u = 0, v = 0;
+  while (u === 0) u = rng();
+  while (v === 0) v = rng();
+  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+function simulatePointsForPlayer(p, rng) {
+  // target points around proj with spread based on floor/ceil
+  const spread = Math.max(1, (p.ceil - p.floor) / 4);
+  const raw = p.proj + randNormal(rng) * spread;
+
+  // bias riskier players to more volatility
+  const tagBoost = p.tag === "risk" ? 1.25 : p.tag === "ok" ? 1.0 : 0.85;
+  const points = clamp(raw * tagBoost, p.floor, p.ceil);
+
+  // Return points (already "fantasy points"); for an API future, we'd return stat lines too.
+  return Number(points.toFixed(1));
+}
+
+function simulateLineupWeek(lineupPlayers, rng) {
+  const results = lineupPlayers.map(p => ({
+    name: p.name,
+    pos: p.pos,
+    points: simulatePointsForPlayer(p, rng)
+  }));
+
+  const total = results.reduce((s, r) => s + r.points, 0);
+  return { results, total: Number(total.toFixed(1)) };
+}
+
+function computeOptimalLineup(rngSeedKey) {
+  // brute force a small "optimal" from current pool by picking best projected per slot (with uniqueness constraint)
+  // For MVP pool size this is fine.
+  const chosen = {};
+  const used = new Set();
+
+  for (const slot of LINEUP_SLOTS) {
+    const candidates = getPlayersByAllowed(slot.allowed)
       .slice()
-      .sort((a, b) => b.proj - a.proj);
+      .sort((a,b) => b.proj - a.proj);
 
-    const best = eligible[0] || null;
-
-    if (!best) return;
-
-    if (!chosen) {
-      recommendations.push({
-        title: `${k}: pick suggestion`,
-        body: `Start with ${best.name} (Proj ${best.proj.toFixed(1)}).`,
-        why: `Rule: In a vacuum, take the highest projection for the slot.`
-      });
-      return;
+    const pick = candidates.find(p => !used.has(p.name));
+    if (pick) {
+      chosen[slot.key] = pick;
+      used.add(pick.name);
     }
-
-    const diff = best.proj - chosen.proj;
-    const chosenRisk = chosen.tag === "risk";
-    const bestSafer = best.tag === "good" && chosen.tag !== "good";
-
-    if (diff > 1.5 || bestSafer) {
-      const whyBits = [];
-      if (diff > 1.5) whyBits.push(`projection edge +${diff.toFixed(1)}`);
-      if (bestSafer) whyBits.push(`safer profile (${best.tag} vs ${chosen.tag})`);
-      if (chosenRisk) whyBits.push(`avoid risk in standard scoring`);
-
-      recommendations.push({
-        title: `${k}: consider swap`,
-        body: `You picked ${chosen.name}. Coach leans ${best.name}.`,
-        why: `Why: ${whyBits.join(", ")}.`
-      });
-    } else {
-      recommendations.push({
-        title: `${k}: looks good`,
-        body: `Your pick ${chosen.name} is close to optimal.`,
-        why: `Why: within ~1.5 projected points; keep it strategy-focused.`
-      });
-    }
-  });
-
-  coachEl.innerHTML = recommendations.map(r => `
-    <div class="coach-card">
-      <div><strong>${escapeHtml(r.title)}</strong></div>
-      <div class="muted">${escapeHtml(r.body)}</div>
-      <div class="muted">${escapeHtml(r.why)}</div>
-    </div>
-  `).join("");
-}
-
-// ---------- Standard scoring simulation ----------
-function clamp(n, lo, hi) {
-  return Math.max(lo, Math.min(hi, n));
-}
-
-function varianceByTag(tag) {
-  // smaller = more stable; bigger = more volatile
-  if (tag === "good") return 0.9;
-  if (tag === "ok") return 1.15;
-  return 1.45;
-}
-
-function randInt(rng, lo, hi) {
-  return Math.floor(rng() * (hi - lo + 1)) + lo;
-}
-
-function simulateSkillStats(rng, p) {
-  // RB/WR/TE: rushing + receiving + TD + fumble
-  // We build a "target fantasy points" then convert into plausible yards/TD.
-  const v = varianceByTag(p.tag);
-  const target = clamp(p.proj * (0.75 + rng() * 0.5) * v, p.floor, p.ceil);
-
-  let recTd = 0;
-  let rushTd = 0;
-
-  // TD likelihood scaled by projection
-  const tdChances = clamp(target / 12, 0.2, 2.2);
-  const tdRoll = rng() * tdChances;
-
-  if (tdRoll > 1.6) { recTd = 1; }
-  if (tdRoll > 2.0) { recTd = 2; }
-  if (p.pos === "RB" && tdRoll > 1.2) { rushTd = 1; }
-  if (p.pos === "RB" && tdRoll > 2.1) { rushTd = 2; }
-
-  // rare fumble
-  const fumbles = (p.tag === "risk" && rng() < 0.12) ? 1 : (rng() < 0.05 ? 1 : 0);
-
-  const tdPts = (recTd + rushTd) * 6;
-  const fumPts = fumbles * (-2);
-
-  // remaining points to distribute to yards
-  let remaining = target - tdPts - fumPts;
-  remaining = Math.max(0, remaining);
-
-  // split rush vs rec based on position
-  const rushShare = p.pos === "RB" ? 0.55 : (p.pos === "TE" ? 0.10 : 0.25);
-  const rushPts = remaining * (rushShare + (rng() * 0.12 - 0.06));
-  const recPts = remaining - rushPts;
-
-  // convert points to yards: 1 pt per 10 yards
-  let rushYds = Math.round(clamp(rushPts * 10, 0, 180));
-  let recYds = Math.round(clamp(recPts * 10, 0, 220));
-
-  // mild realism nudge using floor/ceil
-  if (target < (p.proj * 0.85)) {
-    rushYds = Math.round(rushYds * 0.9);
-    recYds = Math.round(recYds * 0.9);
   }
 
-  const points = (rushYds / 10) + (recYds / 10) + (recTd * 6) + (rushTd * 6) + (fumbles * -2);
-  return {
-    type: "skill",
-    rushYds, recYds, rushTd, recTd, fumbles,
-    points: Number(points.toFixed(1))
-  };
-}
-
-function simulateQBStats(rng, p) {
-  const v = varianceByTag(p.tag);
-  const target = clamp(p.proj * (0.75 + rng() * 0.5) * v, p.floor, p.ceil);
-
-  // TDs and INTs
-  const passTd = clamp(randInt(rng, 1, 4) + (target > 22 ? 1 : 0), 0, 5);
-  const rushTd = (rng() < (p.tag === "risk" ? 0.10 : 0.06)) ? 1 : 0;
-  const ints = (rng() < (p.tag === "risk" ? 0.30 : 0.18)) ? randInt(rng, 1, 2) : 0;
-
-  const tdPts = passTd * 4 + rushTd * 6;
-  const intPts = ints * (-2);
-
-  let remaining = target - tdPts - intPts;
-  remaining = Math.max(0, remaining);
-
-  // allocate some to rushing
-  const rushPts = clamp(remaining * (0.20 + (rng() * 0.10 - 0.05)), 0, remaining);
-  const passPts = remaining - rushPts;
-
-  let rushYds = Math.round(clamp(rushPts * 10, 0, 90));
-  let passYds = Math.round(clamp(passPts * 25, 0, 450));
-
-  const points =
-    (passYds / 25) +
-    (passTd * 4) +
-    (ints * -2) +
-    (rushYds / 10) +
-    (rushTd * 6);
-
-  return {
-    type: "qb",
-    passYds, passTd, ints, rushYds, rushTd,
-    points: Number(points.toFixed(1))
-  };
-}
-
-function simulatePlayerWeek(rng, p) {
-  if (p.pos === "QB") return simulateQBStats(rng, p);
-  return simulateSkillStats(rng, p);
-}
-
-function simulateLineupWeek() {
-  const slotKeys = getSlotOrder();
-  const selected = [];
-
-  for (const k of slotKeys) {
-    const name = lineup[k];
-    if (!name) return { ok: false, reason: "Fill all lineup slots first." };
-    const p = lineupSlate.find(x => x.name === name);
-    if (!p) return { ok: false, reason: `Missing player for slot ${k}.` };
-    selected.push({ slot: k, player: p });
-  }
-
-  // ensure unique players
-  const uniq = new Set(selected.map(x => x.player.name));
-  if (uniq.size !== selected.length) {
-    return { ok: false, reason: "A player is selected more than once. Fix duplicates." };
-  }
-
-  const seed = isDailyMode()
-    ? hashToInt(`daily:${todayKeyUTC()}:simulate`)
-    : hashToInt(`random:${Date.now()}:${Math.random()}:simulate`);
-
+  // simulate with deterministic seed for "optimal" too
+  const seed = hashToInt(`lineup-sim:${rngSeedKey}:optimal`);
   const rng = seededRand(seed);
 
-  const details = selected.map(x => {
-    const sim = simulatePlayerWeek(rng, x.player);
-    return { slot: x.slot, p: x.player, sim };
-  });
-
-  const weekScore = details.reduce((sum, x) => sum + x.sim.points, 0);
-  const proj = computeLineupProjection();
-  const optimalProj = computeGreedyOptimalProjection();
-
-  // grade based on projection ratio (strategy-focused)
-  const ratio = optimalProj > 0 ? (proj / optimalProj) : 0;
-  const grade = ratio >= 0.95 ? "A" : ratio >= 0.90 ? "B" : ratio >= 0.85 ? "C" : "D";
-
-  return {
-    ok: true,
-    weekScore: Number(weekScore.toFixed(1)),
-    proj: Number(proj.toFixed(1)),
-    optimalProj: Number(optimalProj.toFixed(1)),
-    grade,
-    details
-  };
+  const lineupPlayers = LINEUP_SLOTS.map(s => chosen[s.key]).filter(Boolean);
+  return simulateLineupWeek(lineupPlayers, rng);
 }
 
-function formatSimLine(x) {
-  const p = x.p;
-  const s = x.sim;
+// -------------------- v2: Leaderboards --------------------
+function lbKeyForMode(m) {
+  return m === "lineup" ? "lb_lineup" : "lb_startsit";
+}
+function addToLeaderboard(m, entry) {
+  const key = lbKeyForMode(m);
+  const board = getJSON(key, []);
+  board.push(entry);
+  board.sort((a,b) => b.score - a.score);
+  setJSON(key, board.slice(0, 10));
+}
+function renderLeaderboards() {
+  const ss = getJSON("lb_startsit", []);
+  const lu = getJSON("lb_lineup", []);
 
-  if (s.type === "qb") {
-    return `${p.name} — ${s.points.toFixed(1)} pts • ${s.passYds} pass yds, ${s.passTd} pass TD, ${s.ints} INT, ${s.rushYds} rush yds, ${s.rushTd} rush TD`;
-  }
-  return `${p.name} — ${s.points.toFixed(1)} pts • ${s.rushYds} rush yds, ${s.recYds} rec yds, ${s.rushTd} rush TD, ${s.recTd} rec TD, ${s.fumbles} fum`;
+  ssBoardEl.innerHTML = ss.length
+    ? ss.map(e => `<li><strong>${e.score.toFixed(1)}</strong> <span class="lb-meta">(${e.when})</span></li>`).join("")
+    : `<li class="lb-meta">No scores yet.</li>`;
+
+  luBoardEl.innerHTML = lu.length
+    ? lu.map(e => `<li><strong>${e.score.toFixed(1)}</strong> <span class="lb-meta">(${e.when})</span></li>`).join("")
+    : `<li class="lb-meta">No scores yet.</li>`;
 }
 
-// ---------- mode lifecycle ----------
-function setMode(nextMode) {
-  mode = nextMode;
-  hintOn = false; // reset hint/coach toggle per mode
-  scored = false;
+// -------------------- mode switching --------------------
+function setMode(m) {
+  mode = m;
+  setStr("ss_mode_game", mode);
+  renderModeUI();
+}
+function getSavedMode() {
+  const v = getStr("ss_mode_game", "startsit");
+  return (v === "lineup" || v === "startsit") ? v : "startsit";
+}
+function renderModeUI() {
+  const isLineup = mode === "lineup";
+  modeBtn.textContent = `Mode: ${isLineup ? "Lineup" : "Start/Sit"}`;
+
+  matchupsEl.hidden = isLineup;
+  lineupSection.hidden = !isLineup;
+
+  // Adjust results labels
+  resultsTitleEl.textContent = isLineup ? "Lineup Results" : "Start/Sit Results";
+  labelYourScoreEl.textContent = isLineup ? "Your Lineup" : "Your Score";
+  labelOptimalScoreEl.textContent = isLineup ? "Optimal Lineup" : "Optimal Score";
+  labelAccuracyEl.textContent = isLineup ? "Slots Filled" : "Accuracy";
+  labelOutcomeEl.textContent = isLineup ? "Outcome" : "Outcome";
+
+  resultsTipEl.textContent = isLineup
+    ? "Tip: Optimize for floor if you’re protecting a lead; chase ceiling if you need upside."
+    : "Tip: “Win” = you matched the optimal pick in at least 3 of 4 matchups.";
+
   clearResults();
-  setResultsUIForMode();
-  renderModeToggle();
-  renderStats();
   renderLeaderboards();
 
-  if (mode === "startsit") {
-    matchups = generateMatchups();
-    renderMatchups();
-    setMessage(isDailyMode()
-      ? "Daily matchups loaded. Everyone gets the same slate today."
-      : "New week loaded. Make your Start picks and score it.");
-  } else {
-    lineupSlate = slateForWeek();
-    lineup = {};
-    lastLineupSim = null;
+  if (isLineup) {
     renderSlots();
-    setMessage(isDailyMode()
-      ? "Daily lineup slate loaded. Everyone gets the same slate today."
-      : "New lineup slate loaded. Build your lineup and simulate the week.");
-  }
-}
-
-function updateWeekLabel(preserveWeekNumber) {
-  if (!preserveWeekNumber) week += 1;
-  if (week < 1) week = 1;
-
-  if (isDailyMode()) {
-    weekLabelEl.textContent = `Daily: ${todayKeyUTC()} (UTC)`;
+    renderCoach();
+    setMessage("Lineup mode: build a roster and simulate the week.");
   } else {
-    weekLabelEl.textContent = `Week: ${week}`;
+    setMessage("Start/Sit mode: make your picks and score the slate.");
   }
 }
 
-// ---------- utilities ----------
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-// ---------- event wiring ----------
+// -------------------- events --------------------
 matchupsEl.addEventListener("click", (e) => {
-  if (mode !== "startsit") return;
-
   const btn = e.target.closest("button.pick");
   if (!btn || scored) return;
+
+  if (mode !== "startsit") return;
 
   const idx = Number(btn.dataset.idx);
   const pick = btn.dataset.pick;
@@ -788,53 +545,55 @@ matchupsEl.addEventListener("click", (e) => {
   renderMatchups();
 });
 
-slotsEl.addEventListener("change", (e) => {
-  if (mode !== "lineup") return;
-  const sel = e.target.closest("select[data-slot]");
-  if (!sel) return;
-
-  const slot = sel.dataset.slot;
-  const value = sel.value;
-
-  lineup[slot] = value || "";
-  renderSlots();
-});
-
 hintBtn.addEventListener("click", () => {
   hintOn = !hintOn;
-  setResultsUIForMode();
-
-  if (mode === "startsit") {
-    renderMatchups();
-  } else {
-    renderCoach();
-  }
+  hintBtn.textContent = `Hint: ${hintOn ? "On" : "Off"}`;
+  if (mode === "startsit") renderMatchups();
 });
 
 dailyBtn.addEventListener("click", () => {
   setDailyMode(!isDailyMode());
-  updateWeekLabel(true);
-  // refresh current mode slate/matchups deterministically
-  setMode(mode);
+  startWeek(true);
 });
 
 newWeekBtn.addEventListener("click", () => {
-  updateWeekLabel(false);
-  setMode(mode);
+  startWeek(false);
 });
 
 modeBtn.addEventListener("click", () => {
   setMode(mode === "startsit" ? "lineup" : "startsit");
 });
 
-scoreBtn.addEventListener("click", () => {
-  if (mode === "startsit") {
-    if (scored) {
-      setMessage("This week is already scored. Hit New Week to play again.");
-      return;
-    }
+slotsEl.addEventListener("change", (e) => {
+  const sel = e.target.closest("select.select");
+  if (!sel) return;
 
-    const r = computeWeekScoreStartSit();
+  const slotKey = sel.dataset.slot;
+  const val = sel.value;
+
+  // Ensure uniqueness: if selected player is already used elsewhere, clear that other slot
+  if (val) {
+    for (const k of Object.keys(lineup)) {
+      if (k !== slotKey && lineup[k] === val) lineup[k] = "";
+    }
+  }
+  lineup[slotKey] = val;
+
+  renderSlots();
+  renderCoach();
+});
+
+scoreBtn.addEventListener("click", () => {
+  if (scored) {
+    setMessage("This slate is already scored. Hit New Week to play again.");
+    return;
+  }
+
+  // Common seed key for simulations
+  const seedKey = isDailyMode() ? `daily:${todayKeyUTC()}` : `week:${week}`;
+
+  if (mode === "startsit") {
+    const r = computeWeekScore();
     if (!r.ok) {
       setMessage(r.reason);
       return;
@@ -846,13 +605,12 @@ scoreBtn.addEventListener("click", () => {
     optimalScoreEl.textContent = r.optimalScore.toFixed(1);
     accuracyEl.textContent = `${r.correct}/${MAX_MATCHUPS} (${r.accuracyPct}%)`;
 
-    const didWin = winWeekStartSit(r.correct);
+    const didWin = winWeek(r.correct);
     outcomeEl.textContent = didWin ? "WIN ✅" : "LOSS ❌";
 
     updateBestScore(r.yourScore);
 
-    const label = isDailyMode() ? `Daily ${todayKeyUTC()} (UTC)` : `Week ${week}`;
-    pushLeaderboard("lb_startsit", { score: r.yourScore, label });
+    addToLeaderboard("startsit", { score: r.yourScore, when: new Date().toLocaleString() });
     renderLeaderboards();
 
     setMessage(didWin
@@ -863,46 +621,69 @@ scoreBtn.addEventListener("click", () => {
     return;
   }
 
-  // Lineup mode
-  const r = simulateLineupWeek();
-  if (!r.ok) {
-    setMessage(r.reason);
+  // Lineup mode scoring
+  if (!isLineupComplete()) {
+    setMessage("Fill all lineup slots before scoring.");
     return;
   }
 
-  lastLineupSim = r;
+  // Deterministic sim RNG for lineup
+  const seed = hashToInt(`lineup-sim:${seedKey}:yours`);
+  const rng = seededRand(seed);
 
-  yourScoreEl.textContent = r.weekScore.toFixed(1);
-  optimalScoreEl.textContent = r.optimalProj.toFixed(1);
-  accuracyEl.textContent = r.proj.toFixed(1);
-  outcomeEl.textContent = `${r.grade}`;
+  const lineupPlayers = LINEUP_SLOTS
+    .map(s => PLAYERS.find(p => p.name === lineup[s.key]))
+    .filter(Boolean);
 
-  const label = isDailyMode() ? `Daily ${todayKeyUTC()} (UTC)` : `Week ${week}`;
-  pushLeaderboard("lb_lineup", { score: r.weekScore, label });
+  const yours = simulateLineupWeek(lineupPlayers, rng);
+  const optimal = computeOptimalLineup(seedKey);
+
+  scored = true;
+
+  yourScoreEl.textContent = `${yours.total.toFixed(1)} pts`;
+  optimalScoreEl.textContent = `${optimal.total.toFixed(1)} pts`;
+  accuracyEl.textContent = `${lineupPlayers.length}/${LINEUP_SLOTS.length}`;
+  outcomeEl.textContent = yours.total >= optimal.total ? "GREAT WEEK ✅" : "ROOM TO IMPROVE ❌";
+
+  addToLeaderboard("lineup", { score: yours.total, when: new Date().toLocaleString() });
   renderLeaderboards();
 
-  setMessage(`Week simulated. Grade ${r.grade}. Scroll AI Coach for lineup feedback.`);
-
-  // Append simulation detail under coach area (strategy + realism)
-  if (hintOn) {
-    const detailHtml = `
-      <div class="coach-card">
-        <div><strong>Simulation Detail</strong></div>
-        <div class="muted">${escapeHtml(label)}</div>
-        <div class="muted">${escapeHtml(r.details.map(formatSimLine).join(" | "))}</div>
-      </div>
-    `;
-    coachEl.insertAdjacentHTML("beforeend", detailHtml);
-  }
+  setMessage("Lineup simulated. Try swapping one player and run it back next slate.");
 });
 
-// ---------- init ----------
-function init() {
+// -------------------- week lifecycle --------------------
+function startWeek(preserveWeekNumber) {
+  scored = false;
+  hintOn = false;
+  hintBtn.textContent = "Hint: Off";
+
+  if (!preserveWeekNumber) week += 1;
+  if (week < 1) week = 1;
+
+  weekLabelEl.textContent = isDailyMode()
+    ? `Daily: ${todayKeyUTC()} (UTC)`
+    : `Week: ${week}`;
+
+  matchups = generateMatchups();
+
+  // reset lineup slate selections each new week
+  lineup = {};
+  renderSlots();
+  renderCoach();
+
+  clearResults();
   renderModeToggle();
   renderStats();
+  renderMatchups();
   renderLeaderboards();
-  updateWeekLabel(true);
-  setMode("startsit");
+
+  setMessage(isDailyMode()
+    ? "Daily slate loaded. Everyone gets the same matchups today."
+    : "New slate loaded. Make picks (or build a lineup) and score it.");
 }
 
-init();
+// init
+setMode(getSavedMode());
+renderModeToggle();
+renderStats();
+startWeek(true);
